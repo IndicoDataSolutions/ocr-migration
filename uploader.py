@@ -3,8 +3,6 @@ from indico.queries import CreateDataset
 from indico.queries.storage import UploadBatched, CreateStorageURLs
 import os
 import pandas as pd
-import json
-
 
 def make_dataset_for_upload(client, document_dir, migrated, dataset_name):
     doc_paths = []
