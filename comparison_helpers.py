@@ -4,7 +4,7 @@ import json
 import pandas as pd
 
 
-def convert_results(res):  # sourcery skip: extract-duplicate-method
+def convert_results(res):
     all_spans = [r["spans"] for r in res]
     all_spans = [dict(item, **{"checked": False}) for item in all_spans]
     all_converted = []
@@ -16,6 +16,7 @@ def convert_results(res):  # sourcery skip: extract-duplicate-method
             "text": a["text"],
             "start": a["text_spans"][0]["start"],
             "end": a["text_spans"][0]["end"],
+            "page_num": a["page_num"],
         }
         adjacent = True
         last_end = a["text_spans"][0]["start"] - 1
