@@ -12,6 +12,7 @@ from copy import copy
 import logging
 import yaml
 from fire import Fire
+from uploader import upload
 
 logging.basicConfig(
     filename="ocr_migration.log",
@@ -405,7 +406,7 @@ def run_all_docs(config):
     return mappings_by_file_name
 
 
-def run(config, out_file="./summary.xlsx"):
+def run(config, dataset_name, api_key_path, indico_host, summary_file="./summary.xlsx"):
     with open(config, "r") as file:
         config_dict = yaml.load(file, Loader=yaml.FullLoader)
     aligner_config = AlignerConfig(config_dict)
@@ -414,13 +415,16 @@ def run(config, out_file="./summary.xlsx"):
         f"./{aligner_config.new_engine_folder_name}/all_labels.csv", index_col=0
     )
 
-    import pickle
-
-    with open(f"{config.split('.')[0]}.p", "wb") as f:
-        pickle.dump(all_results, f)
-
     summary_by_file = summarize_results(all_results, new_ocr)
-    convert_to_excel(summary_by_file, out_file)
+    convert_to_excel(summary_by_file, summary_file)
+
+    upload(
+        indico_host,
+        api_key_path,
+        f"{aligner_config.new_engine_folder_name}/files",
+        dataset_name,
+        all_results,
+    )
 
 
 if __name__ == "__main__":
