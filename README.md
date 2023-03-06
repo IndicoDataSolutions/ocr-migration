@@ -19,4 +19,4 @@ It takes two arguments:
    - a config (which captures RANSAC parameters as well as the pair of folders that contain the old (with labels) and new ocr)
    - the location where an excel summary should be saved.
    
-**Finally, push the labels to the platform with TODO.py.**
+**Finally, push the labels to the platform with uploader.py.**
