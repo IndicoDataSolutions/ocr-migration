@@ -288,6 +288,48 @@ def order_text_spans_from_zone(config, box, toks):
     return text_spans, text
 
 
+def merge_adjacent_spans(tokens):
+    """
+    {
+        "token": {
+            'label': 'a',
+            ...
+        }, 
+        "spans": {
+            "text_spans": [
+                {
+                    "start": 0,
+                    "end": 1,
+                    "page_num": 0
+                },
+            ...
+            ]
+        }, 
+        "original_token": {
+            'label': 'a',
+            ...
+        }
+    )
+    """
+    # Filter tokens without text spans 
+    # TODO: sort out when this happens
+    tokens = [t for t in tokens if t['spans']['text_spans']]
+    if not len(tokens):
+        return tokens
+    
+    merged_tokens = [tokens[0]]
+    for token in tokens[1:]:
+        prev_token = merged_tokens[-1]
+        if token['token']['label'] != prev_token['token']['label']:
+            merged_tokens.append(token)
+        elif (token['spans']['text_spans'][0]['start'] - 2) <= prev_token['spans']['text_spans'][-1]['end']:
+            prev_token['spans']['text_spans'][-1]['end'] = token['spans']['text_spans'][-1]['end']
+        else:
+            merged_tokens.append(token)
+    return merged_tokens
+
+    
+
 def run_all_pages_for_doc(
     file,
     new_ocr_for_file,
@@ -368,6 +410,7 @@ def run_all_pages_for_doc(
                 {"token": t, "spans": extracted_spans_for_label, "original_token": o}
             )
 
+        label_token_map = merge_adjacent_spans(label_token_map)
         label_to_token_by_page[page_number] = label_token_map
 
     return label_to_token_by_page

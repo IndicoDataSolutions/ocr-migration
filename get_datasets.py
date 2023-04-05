@@ -55,6 +55,19 @@ class GetDatafileByID(GraphQLMagic):
     }
     """
 
+
+class GetLabelsetName(GraphQLMagic):
+    query = """
+    query GetTargetNames($datasetId:Int!){
+        dataset(id:$datasetId) {
+            labelsets {
+                id
+                name
+            }
+        }
+    }
+    """
+
 def get_export(client, dataset_id, labelset_id=None):
     # Get dataset object
     dataset = client.call(GetDataset(id=dataset_id))
@@ -158,7 +171,13 @@ def get_dataset(name, dataset_id, labelset_id=None, label_col="labels", text_col
         host=host, api_token_path=api_token_path,
     )
     client = IndicoClient(config=my_config)
-
+    if labelset_id:
+        labelset = next(
+            labelset for labelset in client.call(GetLabelsetName(datasetId=dataset_id))['dataset']['labelsets']
+            if labelset['id'] == labelset_id
+        )
+        label_col = labelset['name']
+        
     export_path = os.path.join(name, "raw_export.csv")
 
     if not os.path.exists(export_path):
@@ -185,7 +204,7 @@ def get_dataset(name, dataset_id, labelset_id=None, label_col="labels", text_col
         if label_col not in row or pd.isna(row[label_col]):
             labels = None
         else:
-            labels = reformat_labels(row[label_col], row[text_col])
+            labels = reformat_labels(row[label_col], text)
         
         output_record = {
             "ocr": json.dumps(page_ocrs),

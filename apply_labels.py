@@ -23,6 +23,7 @@ class GetLabelsetMeta(GraphQLMagic):
         dataset(id:$datasetId) {
             labelsets {
                 id
+                name
                 targetNames {
                     id
                     name

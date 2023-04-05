@@ -5,7 +5,7 @@
 **First, run [get_datasets.py](https://github.com/IndicoDataSolutions/ocr-migration/blob/main/get_datasets.py) to gather OCR + Labels for the original dataset. **
 
 ```bash
-python3 get_datasets.py --name old --dataset_id 12960 --labelset_id 27412 --label_col="annotation" --text_col="pdf"
+python3 get_datasets.py --name old --dataset_id 12960 --labelset_id 27412 --text_col="pdf"
 ```
 
 You should end up with file structure like this:
@@ -93,3 +93,7 @@ If you already have a workflow and a model group, use the model group ID:
 ```
 python3 apply_labels.py new/revised_labels.json --new_export_path new/raw_export.csv --new_dataset_id 13431 --workflow_id 5646 --mg_id 10186
 ```
+
+# TODO:
+
+- Merge spans that can be merged so that it looks cleaner in the UI
