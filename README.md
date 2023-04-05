@@ -35,7 +35,13 @@ If you don't have the labelset ID handy, that can be found using the GraphQL que
 
 If the script fails for any reason you should be safe to re-run as the files are cached -- but it will still take time to load page JSONs from disk (several minutes for all page files in a ~200 doc dataset).
 
-Next, upload the files in the `old/files` directory to a new dataset and configure the dataset to use the OCR you're looking to migrate to. After this is complete, run the `get_datasets.py script again. This time you won't need to supply
+**Next, upload the files in the `old/files` directory to a new dataset using the UI**
+Make sure to configure the dataset to use the OCR you're looking to migrate to.  
+You'll want to make note of the dateset ID because you'll need it in the next step.
+
+**After this is complete, run the `get_datasets.py script again.**
+
+This time you won't need to supply
 arguments related to labels, because we only have raw docs.
 
 ```bash
@@ -68,7 +74,9 @@ If you want to test on a subset you can pass the num_docs argument
 python3 ocr_migration.py omni_to_read.yaml --new_dataset_id 13431 --num_docs 1
 ```
 
-Finally, you can apply the revised labels to your new dataset. Be warned that this will overwrite any existing labels.
+**Finally, you can apply the revised labels to your new dataset.**
+
+Be warned that this will overwrite any existing labels on that labelset.
 
 ```
 python3 apply_labels.py new/revised_labels.json --new_export_path new/raw_export.csv --dataset_id 13431 --workflow_name "Workflow converted to ReadAPI"
