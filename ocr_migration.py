@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import imutils
 import cv2
 import pandas as pd
@@ -13,11 +14,19 @@ import logging
 import yaml
 from fire import Fire
 from uploader import upload
+from indico.client import GraphQLRequest
+
+class GraphQLMagic(GraphQLRequest):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(query=self.query, variables=kwargs)
+
 
 logging.basicConfig(
     filename="ocr_migration.log",
     filemode="w",
     format="%(name)s - %(levelname)s - %(message)s",
+    level=os.getenv("LOGGING_LEVEL", "INFO")
 )
 
 from geometry_helpers import (
@@ -406,7 +415,7 @@ def run_all_docs(config):
     return mappings_by_file_name
 
 
-def run(config, dataset_name, api_key_path, indico_host, summary_file="./summary.xlsx"):
+def run(config, new_dataset_id, api_key_path="prod_api_token.txt", indico_host="app.indico.io", summary_file="./summary.xlsx"):
     with open(config, "r") as file:
         config_dict = yaml.load(file, Loader=yaml.FullLoader)
     aligner_config = AlignerConfig(config_dict)
@@ -421,8 +430,7 @@ def run(config, dataset_name, api_key_path, indico_host, summary_file="./summary
     upload(
         indico_host,
         api_key_path,
-        f"{aligner_config.new_engine_folder_name}/files",
-        dataset_name,
+        new_dataset_id,
         all_results,
     )
 
