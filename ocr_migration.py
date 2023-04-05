@@ -14,7 +14,6 @@ from copy import copy
 import logging
 import yaml
 from fire import Fire
-from apply_labels import upload
 from indico.client import GraphQLRequest
 import tqdm
 
@@ -273,18 +272,18 @@ def order_text_spans_from_zone(config, box, toks):
     for line in ordered_tokens:
         prev_end = None
         for token in line:
-            if prev_end is not None and token["page_offset"]["start"] - 1 == prev_end:
+            if prev_end is not None and token["doc_offset"]["start"] - 1 == prev_end:
                 # Join with previous token rather than creating new text span
-                text_spans[-1]["end"] = token["page_offset"]["end"]
+                text_spans[-1]["end"] = token["doc_offset"]["end"]
             else:
                 text_spans.append(
                     {
-                        "start": token["page_offset"]["start"],
-                        "end": token["page_offset"]["end"],
+                        "start": token["doc_offset"]["start"],
+                        "end": token["doc_offset"]["end"],
                         "page_num": box["page_num"],
                     }
                 )
-            prev_end = token["page_offset"]["end"]
+            prev_end = token["doc_offset"]["end"]
 
     return text_spans, text
 

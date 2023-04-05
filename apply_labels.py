@@ -17,7 +17,7 @@ class GraphQLMagic(GraphQLRequest):
         super().__init__(query=self.query, variables=kwargs)
 
 
-class GetTargetNames(GraphQLMagic):
+class GetLabelsetMeta(GraphQLMagic):
     query = """
     query GetTargetNames($datasetId:Int!){
         dataset(id:$datasetId) {
@@ -27,6 +27,18 @@ class GetTargetNames(GraphQLMagic):
                     id
                     name
                 }
+            }
+        }
+    }
+    """
+
+class GetQuestionnaireMeta(GraphQLMagic):
+    query = """
+    query GetQuestionnaireDatafiles($questionnaireId: Int!){
+        questionnaire(id: $questionnaireId){
+            examples(numExamples:1000) {
+                id
+                datafileId
             }
         }
     }
@@ -74,9 +86,9 @@ def reformat_labels(label_data_by_page, cls_map):
     reformatted = []
     for str_page_num, page_labels in label_data_by_page.items():
         for label in page_labels:
-            span_data = label['token']['doc_offset']
-            span_data['pageNum'] = label['token']['page_num']
-            reformatted.append({'clsId': cls_map[label['spans']['label']], 'spans': [span_data]})
+            for text_span in label['spans']['text_spans']:
+                text_span['pageNum'] = text_span.pop('page_num')
+                reformatted.append({'clsId': cls_map[label['spans']['label']], 'spans': [text_span]})
     return reformatted
 
     
@@ -133,18 +145,26 @@ def apply_labels(
                 workflow_id=workflow.id,
             )
         )
+        # Not sure if this is necessary
+        import time; time.sleep(60)
+
     matching_component = next(
         c for c in workflow.components if c.component_type == "MODEL_GROUP"
         and (c.model_group.name == mg_name or c.model_group.id == mg_id)
     )
     model_group_id = matching_component.model_group.id
+    questionnaire_id = matching_component.model_group.questionnaire_id
     model_group_meta = client.call(ModelGroupMeta(modelGroupId=model_group_id))['modelGroup']
     labelset_id = model_group_meta['labelsetColumnId']
-    examples = model_group_meta['pagedExamples']['examples']
+    examples = model_group_meta['pagedExamples']['examples'] 
+
+    questionnaire = client.call(GetQuestionnaireMeta(questionnaireId=questionnaire_id))['questionnaire']
+    labelset_meta = client.call(GetLabelsetMeta(datasetId=new_dataset_id))
     labelset = next(
-        lset for lset in client.call(GetTargetNames(datasetId=new_dataset_id))['dataset']['labelsets'] 
+        lset for lset in labelset_meta['dataset']['labelsets'] 
         if lset['id'] == labelset_id
     )
+    examples += questionnaire['examples']
     cls_map = {
         tname['name']: tname['id'] for tname in labelset['targetNames']
     }
@@ -152,6 +172,7 @@ def apply_labels(
         example['datafileId']: example['id'] for example in examples
     }
     for filename, label_data in tqdm.tqdm(revised_labels.items()):
+        print("Processing", filename)
         file_id = name_to_file_id[filename]
         example_id = file_id_to_example_id[file_id]
         targets = reformat_labels(label_data, cls_map)
