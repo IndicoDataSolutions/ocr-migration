@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import ast
 import imutils
 import cv2
 import pandas as pd
@@ -13,8 +14,9 @@ from copy import copy
 import logging
 import yaml
 from fire import Fire
-from uploader import upload
+from apply_labels import upload
 from indico.client import GraphQLRequest
+import tqdm
 
 class GraphQLMagic(GraphQLRequest):
 
@@ -382,25 +384,32 @@ def transform_and_extract(labels, min_offset, max_offset, old_tokens, affine_war
     return ex_tokens, transformed
 
 
-def run_all_docs(config):
+def run_all_docs(config, k=None):
+    logging.info("Loading new dataset...")
     new_directory = config.new_engine_folder_name
     new_ocr_path = f"{new_directory}/all_labels.csv"
-    new_ocr_df = pd.read_csv(new_ocr_path, index_col=0)
+    new_ocr_df = pd.read_csv(new_ocr_path)
+    new_ocr_df["file_name"] = new_ocr_df['document_path'].apply(lambda x: os.path.basename(x))
     new_file_names = set(new_ocr_df["file_name"])
 
+    logging.info("Loading old dataset...")
     old_directory = config.old_engine_folder_name
     old_ocr_path = f"{old_directory}/all_labels.csv"
-    old_ocr_df = pd.read_csv(old_ocr_path, index_col=0)
-    old_file_names = set(old_ocr_df["file_name"].values)
+    old_ocr_df = pd.read_csv(old_ocr_path)
+    old_ocr_df["file_name"] = old_ocr_df['document_path'].apply(lambda x: os.path.basename(x))
+    old_ocr_df = old_ocr_df[old_ocr_df["labels"].notna()]
+    if not len(old_ocr_df):
+        raise ValueError("No files have valid labels")
+    old_file_names = set(old_ocr_df["file_name"])
 
-    common_file_names = old_file_names.intersection(new_file_names)
-    if len(new_file_names) != len(common_file_names):
+    common_file_names = old_file_names & new_file_names
+    if len(old_file_names) > len(common_file_names):
         print(
-            f"The following files are present in the old ocr, but not in the new: {','.join(list(new_file_names - common_file_names))}."
+            f"The following files are present in the old ocr, but not in the new: {','.join(list(old_file_names - common_file_names))}."
         )
 
     mappings_by_file_name = {}
-    for f in common_file_names:
+    for f in tqdm.tqdm(list(common_file_names)[:k]):
         new_ocr_for_file = new_ocr_df[new_ocr_df["file_name"] == f]
         old_ocr_for_file = old_ocr_df[old_ocr_df["file_name"] == f]
         matched_labels_for_doc = run_all_pages_for_doc(
@@ -415,24 +424,15 @@ def run_all_docs(config):
     return mappings_by_file_name
 
 
-def run(config, new_dataset_id, api_key_path="prod_api_token.txt", indico_host="app.indico.io", summary_file="./summary.xlsx"):
+def run(config, new_dataset_id, num_docs=None, api_key_path="prod_api_token.txt", indico_host="app.indico.io", summary_file="./summary.xlsx"):
     with open(config, "r") as file:
         config_dict = yaml.load(file, Loader=yaml.FullLoader)
     aligner_config = AlignerConfig(config_dict)
-    all_results = run_all_docs(aligner_config)
-    new_ocr = pd.read_csv(
-        f"./{aligner_config.new_engine_folder_name}/all_labels.csv", index_col=0
-    )
+    all_results = run_all_docs(aligner_config, k=num_docs)
+    migrated_labels_csv = os.path.join(aligner_config.new_engine_folder_name, 'revised_labels.json')
+    with open(migrated_labels_csv, 'w') as fd:
+        json.dump(all_results, fd)
 
-    summary_by_file = summarize_results(all_results, new_ocr)
-    convert_to_excel(summary_by_file, summary_file)
-
-    upload(
-        indico_host,
-        api_key_path,
-        new_dataset_id,
-        all_results,
-    )
 
 
 if __name__ == "__main__":

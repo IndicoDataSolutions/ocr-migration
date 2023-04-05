@@ -5,8 +5,17 @@
 **First, run [get_datasets.py](https://github.com/IndicoDataSolutions/ocr-migration/blob/main/get_datasets.py) to gather OCR + Labels for the original dataset. **
 
 ```bash
-python3 get_datasets.py --name old --dataset_id 11723 --labelset_id 28306 --label_col="annotation" --text_col="pdf"
+python3 get_datasets.py --name old --dataset_id 12960 --labelset_id 27412 --label_col="annotation" --text_col="pdf"
 ```
+
+You should end up with file structure like this:
+
+- /old:
+  - /files/
+  - /images/
+  - /jsons/
+  - /all_labels.csv
+  - /raw_export.csv
 
 If you don't know the label_col or text_col name you can get them from the `old/raw_export.csv` file that is downloaded on first run (it will hit an exception when those columns don't exist, and you can re-run the script with the right arguments).
 
@@ -24,8 +33,7 @@ If you don't have the labelset ID handy, that can be found using the GraphQL que
 }
 ```
 
-If something goes wrong the first time around, it's safe to re-run the script -- it will skip over files that
-have already been successfully downloaded so it should be quicker.
+If the script fails for any reason you should be safe to re-run as the files are cached -- but it will still take time to load page JSONs from disk (several minutes for all page files in a ~200 doc dataset).
 
 Next, upload the files in the `old/files` directory to a new dataset and configure the dataset to use the OCR you're looking to migrate to. After this is complete, run the `get_datasets.py script again. This time you won't need to supply
 arguments related to labels, because we only have raw docs.
@@ -34,29 +42,46 @@ arguments related to labels, because we only have raw docs.
 python3 get_datasets.py --name new --dataset_id 13431 --text_col="pdf"
 ```
 
-You should end up with file structure like this:
+This will produce the new folder which contains the migrated labels:
 
-- /original:
-  - /images
-  - /files
+- /new:
+  - /files/
+  - /images/
+  - /jsons/
   - /all_labels.csv
+  - /raw_export.csv
 
 **Next, run ocr_migration.py.**
 
-It takes two arguments:
+It takes two required arguments
 
 - a config (which captures RANSAC parameters as well as the pair of folders that contain the old (with labels) and new ocr)
 - the location where an excel summary should be saved.
 
-This will produce the new folder which contains the migrated labels:
-
-- /new:
-  - /images
-  - /files
-  - /all_labels.csv
-
-**Finally, push the labels to the platform with uploader.py.**
-
+```
+python3 ocr_migration.py omni_to_read.yaml --new_dataset_id 13431
 ```
 
+If you want to test on a subset you can pass the num_docs argument
+
+```
+python3 ocr_migration.py omni_to_read.yaml --new_dataset_id 13431 --num_docs 1
+```
+
+Finally, you can apply the revised labels to your new dataset. Be warned that this will overwrite any existing labels.
+
+```
+python3 apply_labels.py new/revised_labels.json --new_export_path new/raw_export.csv --dataset_id 13431 --workflow_name "Workflow converted to ReadAPI"
+```
+
+If you already have a workflow you want to apply the labels to:
+
+```
+python3 apply_labels.py new/revised_labels.json --new_export_path new/raw_export.csv --dataset_id 13431 --workflow_id 5646
+```
+
+If you already have a workflow and a model group, use the model group ID:
+
+```
+python3 apply_labels.py new/revised_labels.json --new_export_path new/raw_export.csv --new_dataset_id 13431 --workflow_id 5646 --mg_id 10186
 ```

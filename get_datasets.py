@@ -49,6 +49,7 @@ class GetDatafileByID(GraphQLMagic):
                 id
                 pageInfo
                 image
+                pageNum
             }
         }
     }
@@ -118,23 +119,37 @@ def reformat_labels(labels, document):
     return json.dumps(old_labels_i)
 
 
-def get_ocr_by_datafile_id(client, datafile_id):
+def get_ocr_by_datafile_id(client, datafile_id, dataset_dir, filename):
     """
     Given an Indico client and a datafile ID, download OCR data for all pages
     along with page image PNGs for each page.
     """
     datafile_meta = client.call(GetDatafileByID(datafileId=datafile_id))
     page_ocrs, page_images = [], []
+    local_page_image_dir = os.path.join(dataset_dir, 'images', filename)
+    local_page_json_dir = os.path.join(dataset_dir, 'jsons', filename)
+    os.makedirs(local_page_image_dir, exist_ok=True)
+    os.makedirs(local_page_json_dir, exist_ok=True)
     for page in datafile_meta['datafile']['pages']:
-        page_info = client.call(RetrieveStorageObject(page['pageInfo']))
+        page_info = page['pageInfo']
+        page_json_file = os.path.join(local_page_json_dir, f"page_{page['pageNum']}.json")
+        page_image_file = os.path.join(local_page_image_dir, f"page_{page['pageNum']}.png")
+        if os.path.exists(page_json_file):
+            page_ocr = json.load(open(page_json_file))
+        else:
+            page_ocr = client.call(RetrieveStorageObject(page['pageInfo']))
         # Could just return page image and save to file in inner loop if required
-        page_image = client.call(RetrieveStorageObject(page['image']))
-        page_ocrs.append(page_info)
-        page_images.append(page_image)
+        if not os.path.exists(page_image_file):
+            page_image = client.call(RetrieveStorageObject(page['image']))
+            with open(page_image_file, 'wb') as fd:
+                fd.write(page_image)
+        page_ocrs.append(page_ocr)
+        page_images.append(page_image_file)
     return page_ocrs, page_images
 
 
-def get_dataset(name, dataset_id, labelset_id=None, label_col="labels", text_col="pdf", filename_col='file_name', host="app.indico.io", api_token_path="prod_api_token.txt", cache=True):
+def get_dataset(name, dataset_id, labelset_id=None, label_col="labels", text_col="pdf", filename_col='file_name', host="app.indico.io", api_token_path="prod_api_token.txt"):
+    # TODO: Get label col name from labelset metadata
     os.makedirs(name, exist_ok=True)
     os.makedirs(os.path.join(name, "images"), exist_ok=True)
     os.makedirs(os.path.join(name, "files"), exist_ok=True)
@@ -158,13 +173,7 @@ def get_dataset(name, dataset_id, labelset_id=None, label_col="labels", text_col
     for i, row in enumerate(tqdm.tqdm(records)):
         filename = os.path.splitext(os.path.basename(row[filename_col]))[0]
         document_path = os.path.join(name, "files", filename + "." + row["file_name"].split(".")[-1])
-        file_dir = os.path.join(name, "images", filename)
-        os.makedirs(file_dir, exist_ok=True)
-        local_page_pattern = os.path.join(file_dir, "page_{}.png")
-        if cache and os.path.exists(document_path):
-            continue
-        
-        page_ocrs, page_images = get_ocr_by_datafile_id(client, row['file_id'])
+        page_ocrs, page_image_paths = get_ocr_by_datafile_id(client, row['file_id'], dataset_dir=name, filename=filename)
 
         # Try to get text from export, but fallback to reconstructing from page OCR
         if text_col in row:
@@ -176,28 +185,24 @@ def get_dataset(name, dataset_id, labelset_id=None, label_col="labels", text_col
         if label_col not in row or pd.isna(row[label_col]):
             labels = None
         else:
-            labels = reformat_labels(row[label_col], row[text_col]),
+            labels = reformat_labels(row[label_col], row[text_col])
         
         output_record = {
             "ocr": json.dumps(page_ocrs),
             "text": text,
-            "labels": labels,
+            "labels": labels
         }
-        image_files = []
-        for (page_ocr, page_image) in zip(page_ocrs, page_images):
-            local_page_image = local_page_pattern.format(page_ocr["pages"][0]["page_num"])
-            image_files.append(local_page_image)
-            with open(local_page_image, "wb") as fp:
-                fp.write(page_image)
-        output_record["image_files"] = json.dumps(image_files)
+        output_record["image_files"] = json.dumps(page_image_paths)
         output_record["document_path"] = document_path
+
         with open(document_path, "wb") as fp:
             fp.write(client.call(RetrieveStorageObject(row["file_url"])))
+
         output_records.append(output_record)
 
     csv_path = os.path.join(name, "all_labels.csv")
     logger.info("Creating CSV...")
-    pd.DataFrame.from_records(output_records).to_csv(csv_path)
+    pd.DataFrame.from_records(output_records).to_csv(csv_path, index=False)
         
     
 if __name__ == "__main__":
