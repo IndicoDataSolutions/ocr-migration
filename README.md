@@ -37,6 +37,7 @@ If the script fails for any reason you should be safe to re-run as the files are
 
 **Next, upload the files in the `old/files` directory to a new dataset using the UI**
 
+You'll want to use the files in this directory even if you have access to the originals you uploaded, to guarantee the file names match up.
 Make sure to configure the dataset to use the OCR you're looking to migrate to.  
 You'll want to make note of the dateset ID because you'll need it in the next step.
 
