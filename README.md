@@ -17,7 +17,8 @@ You should end up with file structure like this:
   - /all_labels.csv
   - /raw_export.csv
 
-If you don't know the label_col or text_col name you can get them from the `old/raw_export.csv` file that is downloaded on first run (it will hit an exception when those columns don't exist, and you can re-run the script with the right arguments).
+If you don't know the text_col name you can get it from the `old/raw_export.csv` file that is downloaded on first run 
+(it will hit an exception when those columns don't exist, and you can re-run the script with the right arguments).
 
 If you don't have the labelset ID handy, that can be found using the GraphQL query below (substitute your own dataset ID):
 
