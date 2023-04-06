@@ -8,4 +8,4 @@ TEXT_EXTRACTION_ATOL: 0.01
 NEWLINE_PIXELS_THRESHOLD: 8
 granularity: tokens
 PARTIAL_AFFINE: True
-engine_pair: ["omnipage", "read"]
+engine_pair: ["old", "new"]
