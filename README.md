@@ -2,7 +2,7 @@
 
 ### Scripts for Migrating Labeled Data from one OCR engine to another
 
-**First, run [get_datasets.py](https://github.com/IndicoDataSolutions/ocr-migration/blob/main/get_datasets.py) to gather OCR + Labels for the original dataset. **
+**First, run [get_datasets.py](https://github.com/IndicoDataSolutions/ocr-migration/blob/main/get_datasets.py) to gather OCR + Labels for the original dataset.**
 
 ```bash
 python3 get_datasets.py --name old --dataset_id 12960 --labelset_id 27412 --text_col="pdf"
