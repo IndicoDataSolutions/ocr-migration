@@ -410,7 +410,6 @@ def run_all_pages_for_doc(
                 {"token": t, "spans": extracted_spans_for_label, "original_token": o}
             )
 
-        label_token_map = merge_adjacent_spans(label_token_map)
         label_to_token_by_page[page_number] = label_token_map
 
     return label_to_token_by_page
