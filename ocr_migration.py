@@ -17,8 +17,8 @@ from fire import Fire
 from indico.client import GraphQLRequest
 import tqdm
 
-class GraphQLMagic(GraphQLRequest):
 
+class GraphQLMagic(GraphQLRequest):
     def __init__(self, *args, **kwargs):
         super().__init__(query=self.query, variables=kwargs)
 
@@ -27,7 +27,7 @@ logging.basicConfig(
     filename="ocr_migration.log",
     filemode="w",
     format="%(name)s - %(levelname)s - %(message)s",
-    level=os.getenv("LOGGING_LEVEL", "INFO")
+    level=os.getenv("LOGGING_LEVEL", "INFO"),
 )
 
 from geometry_helpers import (
@@ -44,7 +44,6 @@ from comparison_helpers import summarize_results, convert_to_excel
 
 
 def get_match_words_from_page(page_ocr, granularity="tokens"):
-    # sourcery skip: de-morgan, inline-immediately-returned-variable
     tokens = [t["text"] for t in page_ocr[granularity]]
     filtered = [w for w in tokens if not w.lower() in string.punctuation]
     return filtered
@@ -294,7 +293,7 @@ def merge_adjacent_spans(tokens):
         "token": {
             'label': 'a',
             ...
-        }, 
+        },
         "spans": {
             "text_spans": [
                 {
@@ -304,31 +303,34 @@ def merge_adjacent_spans(tokens):
                 },
             ...
             ]
-        }, 
+        },
         "original_token": {
             'label': 'a',
             ...
         }
     )
     """
-    # Filter tokens without text spans 
+    # Filter tokens without text spans
     # TODO: sort out when this happens
-    tokens = [t for t in tokens if t['spans']['text_spans']]
+    tokens = [t for t in tokens if t["spans"]["text_spans"]]
     if not len(tokens):
         return tokens
-    
+
     merged_tokens = [tokens[0]]
     for token in tokens[1:]:
         prev_token = merged_tokens[-1]
-        if token['token']['label'] != prev_token['token']['label']:
+        if token["token"]["label"] != prev_token["token"]["label"]:
             merged_tokens.append(token)
-        elif (token['spans']['text_spans'][0]['start'] - 2) <= prev_token['spans']['text_spans'][-1]['end']:
-            prev_token['spans']['text_spans'][-1]['end'] = token['spans']['text_spans'][-1]['end']
+        elif (token["spans"]["text_spans"][0]["start"] - 2) <= prev_token["spans"][
+            "text_spans"
+        ][-1]["end"]:
+            prev_token["spans"]["text_spans"][-1]["end"] = token["spans"]["text_spans"][
+                -1
+            ]["end"]
         else:
             merged_tokens.append(token)
     return merged_tokens
 
-    
 
 def run_all_pages_for_doc(
     file,
@@ -430,14 +432,18 @@ def run_all_docs(config, k=None):
     new_directory = config.new_engine_folder_name
     new_ocr_path = f"{new_directory}/all_labels.csv"
     new_ocr_df = pd.read_csv(new_ocr_path)
-    new_ocr_df["file_name"] = new_ocr_df['document_path'].apply(lambda x: os.path.basename(x))
+    new_ocr_df["file_name"] = new_ocr_df["document_path"].apply(
+        lambda x: os.path.basename(x)
+    )
     new_file_names = set(new_ocr_df["file_name"])
 
     logging.info("Loading old dataset...")
     old_directory = config.old_engine_folder_name
     old_ocr_path = f"{old_directory}/all_labels.csv"
     old_ocr_df = pd.read_csv(old_ocr_path)
-    old_ocr_df["file_name"] = old_ocr_df['document_path'].apply(lambda x: os.path.basename(x))
+    old_ocr_df["file_name"] = old_ocr_df["document_path"].apply(
+        lambda x: os.path.basename(x)
+    )
     old_ocr_df = old_ocr_df[old_ocr_df["labels"].notna()]
     if not len(old_ocr_df):
         raise ValueError("No files have valid labels")
@@ -465,15 +471,23 @@ def run_all_docs(config, k=None):
     return mappings_by_file_name
 
 
-def run(config, new_dataset_id, num_docs=None, api_key_path="prod_api_token.txt", indico_host="app.indico.io", summary_file="./summary.xlsx"):
+def run(config, num_docs=None, summary_file="./summary.xlsx"):
     with open(config, "r") as file:
         config_dict = yaml.load(file, Loader=yaml.FullLoader)
     aligner_config = AlignerConfig(config_dict)
     all_results = run_all_docs(aligner_config, k=num_docs)
-    migrated_labels_csv = os.path.join(aligner_config.new_engine_folder_name, 'revised_labels.json')
-    with open(migrated_labels_csv, 'w') as fd:
-        json.dump(all_results, fd)
+    migrated_labels_csv = os.path.join(
+        aligner_config.new_engine_folder_name, "revised_labels.json"
+    )
 
+    old_ocr = pd.read_csv(
+        f"./{aligner_config.old_engine_folder_name}/all_labels.csv", index_col=0
+    )
+    summary_by_file, overall_summary = summarize_results(all_results, old_ocr)
+    convert_to_excel(summary_by_file, overall_summary, summary_file)
+
+    with open(migrated_labels_csv, "w") as fd:
+        json.dump(all_results, fd)
 
 
 if __name__ == "__main__":
