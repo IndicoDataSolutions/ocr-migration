@@ -2,6 +2,7 @@ from indico_toolkit.metrics.compare_ground_truth import CompareGroundTruth
 from itertools import groupby
 import json
 import pandas as pd
+import os
 
 
 def convert_results(res):
@@ -93,6 +94,11 @@ def filter_empty(preds):
 
 def summarize_results(results, labels_raw):
     records_by_file = {}
+    overall_summary = []
+    labels_raw["file_name"] = labels_raw["document_path"].apply(
+        lambda x: os.path.basename(x)
+    )
+
     for file_name in results.keys():
         all_transformed = results[file_name]
         flattened = []
@@ -103,13 +109,16 @@ def summarize_results(results, labels_raw):
         )
         missing_records = []
         matched_records = []
+        all_label_names = list({o["label"] for o in original_labels})
         # flatten labels and page number
+        summary_by_label = {o: [0, 0] for o in all_label_names}
         for o in original_labels:
             label = o["label"]
             text = o["text"]
             if matches := [
                 t for t in flattened if t["label"] == label and t["text"] == text
             ]:
+                summary_by_label[label][0] += len(matches)
                 matched_records.append(
                     {
                         "original_label": o,
@@ -119,16 +128,35 @@ def summarize_results(results, labels_raw):
                 )
             else:
                 missing_records.append({"original_label": o})
+                summary_by_label[label][1] += 1
+
+        overall_summary.append((file_name, summary_by_label))
+
         records_by_file[file_name] = {
             "matched": matched_records,
             "missing": missing_records,
         }
 
-    return records_by_file
+    condensed = []
+    for f, by_label in overall_summary:
+        total_matched_labels = sum(res[0] for l, res in by_label.items())
+        total_labels = sum(res[0] + res[1] for l, res in by_label.items())
+        by_label = {l: res[0] / (res[0] + res[1]) for l, res in by_label.items()}
+        by_label["Total"] = total_matched_labels / total_labels
+        condensed.append((f, by_label))
+    overall_summary_df = pd.DataFrame(
+        condensed, columns=["file_name", "results"]
+    ).set_index("file_name")
+    overall_summary_df = pd.concat(
+        [overall_summary_df, overall_summary_df["results"].apply(pd.Series)], axis=1
+    ).drop("results", axis=1)
+
+    return records_by_file, overall_summary_df
 
 
-def convert_to_excel(results_dict, out_file):
+def convert_to_excel(results_dict, summary_df, out_file):
     writer = pd.ExcelWriter(out_file, engine="xlsxwriter")
+    summary_df.to_excel(writer, sheet_name="Overall Summary")
     for file_name, results in results_dict.items():
         df = pd.DataFrame.from_records(
             [r["original_label"] for r in results["missing"]], index=None
