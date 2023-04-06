@@ -36,6 +36,7 @@ If you don't have the labelset ID handy, that can be found using the GraphQL que
 If the script fails for any reason you should be safe to re-run as the files are cached -- but it will still take time to load page JSONs from disk (several minutes for all page files in a ~200 doc dataset).
 
 **Next, upload the files in the `old/files` directory to a new dataset using the UI**
+
 Make sure to configure the dataset to use the OCR you're looking to migrate to.  
 You'll want to make note of the dateset ID because you'll need it in the next step.
 
