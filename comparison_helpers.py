@@ -142,7 +142,10 @@ def summarize_results(results, labels_raw):
         total_matched_labels = sum(res[0] for l, res in by_label.items())
         total_labels = sum(res[0] + res[1] for l, res in by_label.items())
         by_label = {l: res[0] / (res[0] + res[1]) for l, res in by_label.items()}
-        by_label["Total"] = total_matched_labels / total_labels
+        if total_labels:
+            by_label["Total"] = total_matched_labels / total_labels
+        else:
+            by_label["Total"] = 0
         condensed.append((f, by_label))
     overall_summary_df = pd.DataFrame(
         condensed, columns=["file_name", "results"]
@@ -157,9 +160,9 @@ def summarize_results(results, labels_raw):
 def convert_to_excel(results_dict, summary_df, out_file):
     writer = pd.ExcelWriter(out_file, engine="xlsxwriter")
     summary_df.to_excel(writer, sheet_name="Overall Summary")
-    for file_name, results in results_dict.items():
+    for i, (file_name, results) in enumerate(results_dict.items()):
         df = pd.DataFrame.from_records(
             [r["original_label"] for r in results["missing"]], index=None
         )
-        df.to_excel(writer, sheet_name=file_name[:30], index=None)
+        df.to_excel(writer, sheet_name=f"{i}_{file_name[:26]}", index=None)
     writer.close()
