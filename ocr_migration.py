@@ -17,18 +17,7 @@ from fire import Fire
 from indico.client import GraphQLRequest
 import tqdm
 
-
-class GraphQLMagic(GraphQLRequest):
-    def __init__(self, *args, **kwargs):
-        super().__init__(query=self.query, variables=kwargs)
-
-
-logging.basicConfig(
-    filename="ocr_migration.log",
-    filemode="w",
-    format="%(name)s - %(levelname)s - %(message)s",
-    level=os.getenv("LOGGING_LEVEL", "INFO"),
-)
+from get_datasets import GraphQLMagic
 
 from geometry_helpers import (
     AlignerConfig,
@@ -41,6 +30,13 @@ from geometry_helpers import (
 )
 
 from comparison_helpers import summarize_results, convert_to_excel
+
+logging.basicConfig(
+    filename="ocr_migration.log",
+    filemode="w",
+    format="%(name)s - %(levelname)s - %(message)s",
+    level=os.getenv("LOGGING_LEVEL", "INFO"),
+)
 
 
 def get_match_words_from_page(page_ocr, granularity="tokens"):
