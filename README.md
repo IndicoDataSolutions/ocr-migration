@@ -63,19 +63,18 @@ This will produce the new folder which contains the migrated labels:
 
 **Next, run ocr_migration.py.**
 
-It takes one required arguments
-
-- path to one of the two yaml configs (which captures RANSAC parameters as well as the pair of folders that contain the old (with labels) and new ocr)
+- ocr_migration.py reads in "migration_config.yaml" to set the configuration of the migration-- any settings changes can be made 
+within that file.
 - the location where an excel summary should be saved is an optional argument, defaults to "./summary.xlsx".
 
 ```
-python3 ocr_migration.py "omni_to_read.yaml"
+python3 ocr_migration.py 
 ```
 
 If you want to test on a subset you can pass the num_docs argument
 
 ```
-python3 ocr_migration.py "omni_to_read.yaml" --num_docs 1
+python3 ocr_migration.py --config "omni_to_read.yaml" --num_docs 1
 ```
 
 **Finally, you can apply the revised labels to your new dataset.**

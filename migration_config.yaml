@@ -1,11 +1,11 @@
 MAX_PIXEL_DISTANCE: 0.2
 NUM_KEYPOINTS_FOR_ALIGNMENT: 20
-maxIters: 2000
-refineIters: 50
+maxIters: 10000
+refineIters: 250
 confidence: 0.9975
 ransacReprojThreshold: 6
-TEXT_EXTRACTION_ATOL: 0.0075
+TEXT_EXTRACTION_ATOL: 0.01
 NEWLINE_PIXELS_THRESHOLD: 8
 granularity: chars
 PARTIAL_AFFINE: True
-engine_pair: ["read", "omnipage"]
+engine_pair: ["old", "new"]

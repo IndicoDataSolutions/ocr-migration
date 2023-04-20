@@ -467,7 +467,7 @@ def run_all_docs(config, k=None):
     return mappings_by_file_name
 
 
-def run(config, num_docs=None, summary_file="./summary.xlsx"):
+def run(config="./migration_config.yaml", num_docs=None, summary_file="./summary.xlsx"):
     with open(config, "r") as file:
         config_dict = yaml.load(file, Loader=yaml.FullLoader)
     aligner_config = AlignerConfig(config_dict)
