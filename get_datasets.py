@@ -147,6 +147,7 @@ def get_ocr_by_datafile_id(client, datafile_id, dataset_dir, filename):
     """
     datafile_meta = client.call(GetDatafileByID(datafileId=datafile_id))
     page_ocrs, page_images = [], []
+    filename = filename.strip()
     local_page_image_dir = os.path.join(dataset_dir, "images", filename)
     local_page_json_dir = os.path.join(dataset_dir, "jsons", filename)
     os.makedirs(local_page_image_dir, exist_ok=True)
@@ -212,6 +213,7 @@ def get_dataset(
 
     records = raw_export.to_dict("records")
     output_records = []
+    label_col = label_col.rsplit("_", 1)[0]
 
     for i, row in enumerate(tqdm.tqdm(records)):
         filename = os.path.splitext(os.path.basename(row[filename_col]))[0]
