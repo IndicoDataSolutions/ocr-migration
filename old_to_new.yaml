@@ -1,0 +1,14 @@
+MAX_PIXEL_DISTANCE: 0.2
+NUM_KEYPOINTS_FOR_ALIGNMENT: 9999
+maxIters: 20000
+refineIters: 200
+confidence: 0.999
+ransacReprojThreshold: 10
+TEXT_EXTRACTION_ATOL: 12
+NEWLINE_PIXELS_THRESHOLD: 8
+granularity: tokens
+PARTIAL_AFFINE: True
+min_keypoint_match_ratio: 0.2
+debug: True
+source_folder: "old-dataset"
+target_folder: "new-dataset"

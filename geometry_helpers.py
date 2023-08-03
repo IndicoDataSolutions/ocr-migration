@@ -9,6 +9,8 @@ import imutils
 
 class AlignerConfig:
     def __init__(self, args):
+        self.debug = args['debug']
+        self.min_keypoint_match_ratio = args['min_keypoint_match_ratio']
         self.MAX_PIXEL_DISTANCE = args["MAX_PIXEL_DISTANCE"]
         self.NUM_KEYPOINTS_FOR_ALIGNMENT = args["NUM_KEYPOINTS_FOR_ALIGNMENT"]
         self.PARTIAL_AFFINE = args["PARTIAL_AFFINE"]
@@ -19,8 +21,8 @@ class AlignerConfig:
         self.TEXT_EXTRACTION_ATOL = args["TEXT_EXTRACTION_ATOL"]
         self.NEWLINE_PIXELS_THRESHOLD = args["NEWLINE_PIXELS_THRESHOLD"]
         self.granularity = args["granularity"]
-        self.old_engine_folder_name = args["engine_pair"][0]
-        self.new_engine_folder_name = args["engine_pair"][1]
+        self.old_engine_folder_name = args["source_folder"]
+        self.new_engine_folder_name = args["target_folder"]
 
 
 def pixel_distance(pos1, pos2):
@@ -44,11 +46,10 @@ def normalize_position(position, page_width, page_height):
 
 def in_box(pos, box, atol=0):
     return (
-        box["left"] < float(pos["left"]) + atol
+        box["left"] < float(pos["left"]) + atol 
         and box["right"] > float(pos["right"]) - atol
-        and box["top"] < float(pos["top"]) + atol
-        and box["top"] < float(pos["top"]) + atol
-        and box["bottom"] > float(pos["bottom"]) - atol
+        and box["top"] < float(pos["top"]) + atol * 0.5
+        and box["bottom"] > float(pos["bottom"]) - atol * 0.5
     )
 
 
@@ -104,23 +105,21 @@ def transform_tokens(H, token_list):
     return transformed_tokens
 
 
-def get_word_match_dict(template_tokens, image_tokens, match_words):
+def get_word_match_dict(old_tokens, new_tokens, match_words):
     """Find all words that occur in both the template and the image. Returns
     dictionaries mapping these words to their respective tokens in each doc."""
-    image_matches = {}
-    template_matches = {}
+    old_matches = {}
+    new_matches = {}
 
     for k in match_words:
-        # Dictionary from key of word to all instances of word on the image
-        image_matches[k] = [
-            tok for tok in image_tokens if tok["text"].lower() == k.lower()
+        old_matches[k] = [
+            tok for tok in old_tokens if tok["text"].lower() == k.lower()
         ]
 
-        # Dictionary from key of word to all instances of word on the template
-        template_matches[k] = [
-            tok for tok in template_tokens if tok["text"].lower() == k.lower()
+        new_matches[k] = [
+            tok for tok in new_tokens if tok["text"].lower() == k.lower()
         ]
-    return image_matches, template_matches
+    return old_matches, new_matches
 
 
 def get_match_words_from_page(page_ocr, granularity="tokens"):
@@ -309,12 +308,11 @@ def extract_text_spans_from_box(
         )
     )
     toks = sorted(toks_in_box, key=lambda t: t["position"]["top"])
-    text_spans, text = order_text_spans_from_zone(config, box, toks)
+    text_spans = order_text_spans_from_zone(config, box, toks)
 
     return {
         "label": box["label"],
         "text_spans": text_spans,
-        "text": text,
         "page_num": box["page_num"],
     }, toks
 
@@ -326,43 +324,23 @@ def order_text_spans_from_zone(config, box, toks):
     for each piece of text, as well as the joined text string
     """
     if len(toks) == 0:
-        return [], ""
-    line_breaks = [0] + [
-        i
-        for i in range(1, len(toks))
-        if toks[i]["position"]["top"] - toks[i - 1]["position"]["top"]
-        > config.NEWLINE_PIXELS_THRESHOLD
-    ]
-
-    # split tokens into separate lines
-    ordered_tokens = []
-    if len(line_breaks) == 1:
-        ordered_tokens.append(sorted(toks, key=lambda t: t["position"]["left"]))
-    else:
-        for idx1, idx2 in zip(line_breaks, line_breaks[1:]):
-            line = toks[idx1:idx2]
-            ordered_tokens.append(sorted(line, key=lambda t: t["position"]["left"]))
-        last_line = toks[line_breaks[-1] :]
-        ordered_tokens.append(sorted(last_line, key=lambda t: t["position"]["left"]))
-    text = "\n".join(" ".join(tok["text"] for tok in line) for line in ordered_tokens)
-
+        return []
     # Return start/end indices for each group of tokens. If tokens are
     # contiguous, join them
     text_spans = []
-    for line in ordered_tokens:
-        prev_end = None
-        for token in line:
-            if prev_end is not None and token["page_offset"]["start"] - 1 == prev_end:
-                # Join with previous token rather than creating new text span
-                text_spans[-1]["end"] = token["page_offset"]["end"]
-            else:
-                text_spans.append(
-                    {
-                        "start": token["page_offset"]["start"],
-                        "end": token["page_offset"]["end"],
-                        "page_num": box["page_num"],
-                    }
-                )
-            prev_end = token["page_offset"]["end"]
+    prev_end = None
+    for token in toks:
+        if prev_end is not None and token["page_offset"]["start"] - 1 == prev_end:
+            # Join with previous token rather than creating new text span
+            text_spans[-1]["end"] = token["page_offset"]["end"]
+        else:
+            text_spans.append(
+                {
+                    "start": token["page_offset"]["start"],
+                    "end": token["page_offset"]["end"],
+                    "page_num": box["page_num"],
+                }
+            )
+        prev_end = token["page_offset"]["end"]
 
-    return text_spans, text
+    return text_spans
