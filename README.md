@@ -74,7 +74,7 @@ python3 ocr_migration.py
 If you want to test on a subset you can pass the num_docs argument
 
 ```
-python3 ocr_migration.py --config "omni_to_read.yaml" --num_docs 1
+python3 ocr_migration.py --config "old_to_new.yaml" --num_docs 1
 ```
 
 **Finally, you can apply the revised labels to your new dataset.**

@@ -1,35 +1,26 @@
-import numpy as np
-import os
-import ast
-import imutils
-import cv2
-import pandas as pd
-import json
-import pandas as pd
-import json
-import string
 import itertools
-from indico_toolkit.association import ExtractedTokens
-from copy import copy
+import json
 import logging
+import os
+import string
+from collections import defaultdict
+
+import cv2
+import numpy as np
+import pandas as pd
 import yaml
 from fire import Fire
-from indico.client import GraphQLRequest
-import tqdm
+from indico_toolkit.association import ExtractedTokens
 
-from get_datasets import GraphQLMagic
-
+from comparison_helpers import convert_to_excel, summarize_results
 from geometry_helpers import (
     AlignerConfig,
-    normalize_position,
-    normalize_tokens,
-    in_box,
     get_word_match_dict,
-    transform_tokens,
+    in_box,
+    normalize_tokens,
     pixel_distance,
+    transform_tokens,
 )
-
-from comparison_helpers import summarize_results, convert_to_excel
 
 logging.basicConfig(
     filename="ocr_migration.log",
@@ -98,7 +89,7 @@ def get_keypoints(
             )
             kpsA.append(kp_old)
 
-            # Keypoints on template
+            # Keypoints on new_img
             kp_new_candidate = cv2.KeyPoint(
                 x=new_size["width"]
                 * (new_candidate["nposition"]["left"] + new_candidate["nposition"]["right"])
@@ -125,8 +116,8 @@ def keypoints(
     """Analyze images with ORB and RANSAC.
     Parameters:
         config (dict): config parameters
-        template_image: cv2 image object to be analyzed
-        template: cv2 image object to be analyzed
+        old_image: cv2 image object to be analyzed
+        new_image: cv2 image object to be analyzed
         keepFraction (float) : how many matches to keep for alignment
         scale_factor (float) : scale image after alignment
         min_distance (float) : maximum distance (0-1 scale) to keep for alignment
@@ -198,7 +189,7 @@ def approx_match(old, new):
     return new_normed == old_normed or (new_normed in old_normed) or (old_normed in new_normed)
 
 def extract_text_spans_from_box(
-    config, new_width, new_height, new_tokens, box
+    expansion, new_width, new_height, new_tokens, box, debug
 ):
     """
     Given a box on a template, extract image tokens that lie within the
@@ -217,7 +208,7 @@ def extract_text_spans_from_box(
             lambda tok: in_box(
                 tok["position"],
                 box["position"],
-                atol=config.TEXT_EXTRACTION_ATOL,
+                atol=expansion,
             ),
             new_tokens,
         )
@@ -230,27 +221,27 @@ def extract_text_spans_from_box(
                 lambda tok: in_box(
                     tok["position"],
                     box["position"],
-                    atol=config.TEXT_EXTRACTION_ATOL * 3,
+                    atol=expansion * 3,
                 ) and approx_match(box, tok),
                 new_tokens,
             )
         )
-    
-    if not toks_in_box:
-        print("Failed to match", box['text_lower'])
-    else:
-        print("Matched", box['text_lower'], "to", [t['text'] for t in toks_in_box])
+
     toks = sorted(toks_in_box, key=lambda t: t['doc_offset']["start"])
-    text_spans = order_text_spans_from_zone(config, box, toks)
+    text_spans = order_text_spans_from_zone(box, toks)
 
     return {
         "label": box["label"],
         "text_spans": text_spans,
         "page_num": box["page_num"],
+        "input_length": len(box['text_lower']),
+        "output_length": len("".join(t['text'] for t in toks_in_box)),
+        "before": box['text_lower'].strip(),
+        "after": "".join(t['text'].lower().strip() for t in toks_in_box)
     }
 
 
-def order_text_spans_from_zone(config, box, toks):
+def order_text_spans_from_zone(box, toks):
     """
     Given the extracted tokens from a box, orders tokens by position and
     returns the GlobalTokenSpan information (start, end, page_num)
@@ -363,9 +354,6 @@ def run_all_pages_for_doc(
         new_tokens = n_0["tokens"]
         norm_new_tokens = normalize_tokens(new_tokens, new_size)
 
-        # visualize_tokens(old_images[page_number], old_tokens, 'orig-img-debug.png')
-        # visualize_tokens(new_images[page_number], new_tokens, 'new-img-debug.png')
-
         if aligner_config.granularity == "tokens":
             norm_old_points = norm_old_tokens
             norm_new_points = norm_new_tokens
@@ -408,34 +396,58 @@ def run_all_pages_for_doc(
             old_labels, min_offset, max_offset, old_tokens, affine_warp
         )
 
-        label_token_map = []
-        for old_token_new_coords, o in zip(old_tokens_new_coords, ex_old_tokens.extracted_tokens):
-            extracted_spans_for_label = extract_text_spans_from_box(
-                aligner_config,
-                new_size["width"],
-                new_size["height"],
-                norm_new_tokens,
-                old_token_new_coords,
-            )
-            label_token_map.append(
-                {
-                    "token": old_token_new_coords, 
-                    "spans": extracted_spans_for_label,
-                    "original_token": o
-                }
-            )
+        label_token_map = defaultdict(list)
+        error_by_setting = defaultdict(list)
 
-        for token in label_token_map:
+        # No source labels on this page
+        if not ex_old_tokens.extracted_tokens:
+            label_to_token_by_page[page_number] = []
+            continue
+
+        for expansion_in_pixels in aligner_config.TEXT_EXTRACTION_ATOL:
+            for old_token_new_coords, o in zip(old_tokens_new_coords, ex_old_tokens.extracted_tokens):
+                extracted_spans_for_label = extract_text_spans_from_box(
+                    expansion_in_pixels,
+                    new_size["width"],
+                    new_size["height"],
+                    norm_new_tokens,
+                    old_token_new_coords,
+                    debug=aligner_config.debug
+                )
+                label_token_map[expansion_in_pixels].append(
+                    {
+                        "token": old_token_new_coords, 
+                        "spans": extracted_spans_for_label,
+                        "original_token": o
+                    }
+                )
+                error_by_setting[expansion_in_pixels].append(abs(extracted_spans_for_label['input_length'] - extracted_spans_for_label['output_length']))
+
+        for k, v in error_by_setting.items():
+            error_by_setting[k] = np.mean(v)
+
+        best_setting = min(error_by_setting.items(), key=lambda x: x[1])[0]
+        
+        best_map = label_token_map[best_setting]
+
+        if aligner_config.debug:
+            for mapped_token in best_map:
+                before = mapped_token['spans']['before']
+                after = mapped_token['spans']['after']
+                if len(before) != len(after):
+                    print(before, "-->", after)
+
+        for token in best_map:
             for span in token['spans']['text_spans']:
                 assert span['start'] <= span['end'], f"Before merge: {token}"
 
-        label_token_map = merge_adjacent_spans(label_token_map)
+        label_token_map = merge_adjacent_spans(best_map)
         
-        for token in label_token_map:
+        for token in best_map:
             for span in token['spans']['text_spans']:
                 assert span['start'] <= span['end'], f"After merge: {token}"
 
-        label_to_token_by_page[page_number] = label_token_map
+        label_to_token_by_page[page_number] = best_map
 
     return label_to_token_by_page
 
