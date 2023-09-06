@@ -119,12 +119,16 @@ def apply_labels(
     host="app.indico.io",
     api_token_path="prod_api_token.txt",
 ):
+    print("Reading csv...")
     new_df = pd.read_csv(new_export_path)
     name_to_file_id = {row["file_name"]: row["file_id"] for _, row in new_df.iterrows()}
     client = IndicoClient(config=IndicoConfig(host=host, api_token_path=api_token_path))
+    print("Getting dataset details...")
     dataset = client.call(GetDataset(id=new_dataset_id))
+    print("Loading revised labels...")
     revised_labels = json.load(open(label_json_path))
 
+    print("Fetching target name info...")
     target_names = get_target_names(revised_labels)
 
     if not workflow_name and not workflow_id:
@@ -139,6 +143,7 @@ def apply_labels(
             CreateWorkflow(name=workflow_name, dataset_id=new_dataset_id)
         )
     else:
+        print("Fetching workflow details...")
         workflow = client.call(GetWorkflow(workflow_id=workflow_id))
 
     # TODO: pass as arg
@@ -171,15 +176,12 @@ def apply_labels(
     )
     model_group_id = matching_component.model_group.id
     questionnaire_id = matching_component.model_group.questionnaire_id
-    model_group_meta = client.call(ModelGroupMeta(modelGroupId=model_group_id))[
-        "modelGroup"
-    ]
-    labelset_id = model_group_meta["labelsetColumnId"]
-    examples = model_group_meta["pagedExamples"]["examples"]
+    model_group_meta = client.call(ModelGroupMeta(modelGroupId=model_group_id))['modelGroup']
+    labelset_id = model_group_meta['labelsetColumnId']
+    examples = model_group_meta['pagedExamples']['examples'] 
 
-    questionnaire = client.call(GetQuestionnaireMeta(questionnaireId=questionnaire_id))[
-        "questionnaire"
-    ]
+    print("Fetching label / questionnaire metadata...")
+    questionnaire = client.call(GetQuestionnaireMeta(questionnaireId=questionnaire_id))['questionnaire']
     labelset_meta = client.call(GetLabelsetMeta(datasetId=new_dataset_id))
     labelset = next(
         lset
@@ -196,15 +198,10 @@ def apply_labels(
         file_id = name_to_file_id[filename]
         example_id = file_id_to_example_id[file_id]
         targets = reformat_labels(label_data, cls_map)
-        client.call(
-            SubmitLabel(
-                labelsetId=labelset_id,
-                labels=[
-                    {"exampleId": example_id, "targets": targets, "override": True}
-                ],
-            )
-        )
-
+        if not targets:
+            print(f"No targets found for {filename}, skipping...")
+            continue
+        client.call(SubmitLabel(labelsetId=labelset_id, labels=[{'exampleId': example_id, 'targets': targets, 'override': True}]))
 
 if __name__ == "__main__":
     fire.Fire(apply_labels)

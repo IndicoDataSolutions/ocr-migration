@@ -41,7 +41,7 @@ If the script fails for any reason you should be safe to re-run as the files are
 
 You'll want to use the files in this directory even if you have access to the originals you uploaded, to guarantee the file names match up.
 Make sure to configure the dataset to use the OCR you're looking to migrate to.  
-You'll want to make note of the dateset ID because you'll need it in the next step.
+You'll want to make note of the dataset ID because you'll need it in the next step.
 
 **After this is complete, run the `get_datasets.py script again.**
 
@@ -74,7 +74,7 @@ python3 ocr_migration.py
 If you want to test on a subset you can pass the num_docs argument
 
 ```
-python3 ocr_migration.py --config "omni_to_read.yaml" --num_docs 1
+python3 ocr_migration.py --config "old_to_new.yaml" --num_docs 1
 ```
 
 **Finally, you can apply the revised labels to your new dataset.**
@@ -94,7 +94,6 @@ If you already have a workflow and/or modelgroup you want to apply the labels to
 ```
 python3 apply_labels.py 13431 --workflow_id 5646 -- mg_id 2432
 ```
-
 
 # TODO:
 
