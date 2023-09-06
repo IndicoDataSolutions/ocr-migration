@@ -324,6 +324,7 @@ def visualize_tokens(image_path, tokens, filename):
     print(f"Saving to: {filename}")
     cv2.imwrite(filename, original_image)
 
+
 def run_all_pages_for_doc(
     file,
     new_ocr_for_file,
@@ -342,112 +343,123 @@ def run_all_pages_for_doc(
     for p_0, n_0 in zip(old_ocr, new_ocr):
         old_page_ocr = p_0["pages"][0]
         page_number = old_page_ocr["page_num"]
-        min_offset = old_page_ocr["doc_offset"]["start"]
-        max_offset = old_page_ocr["doc_offset"]["end"]
+        try:
+            min_offset = old_page_ocr["doc_offset"]["start"]
+            max_offset = old_page_ocr["doc_offset"]["end"]
 
-        old_size = old_page_ocr["size"]
-        old_tokens = p_0["tokens"]
-        norm_old_tokens = normalize_tokens(old_tokens, old_size)
+            old_size = old_page_ocr["size"]
+            old_tokens = p_0["tokens"]
+            norm_old_tokens = normalize_tokens(old_tokens, old_size)
 
-        new_page_ocr = n_0["pages"][0]
-        new_size = new_page_ocr["size"]
-        new_tokens = n_0["tokens"]
-        norm_new_tokens = normalize_tokens(new_tokens, new_size)
+            new_page_ocr = n_0["pages"][0]
+            new_size = new_page_ocr["size"]
+            new_tokens = n_0["tokens"]
+            norm_new_tokens = normalize_tokens(new_tokens, new_size)
 
-        if aligner_config.granularity == "tokens":
-            norm_old_points = norm_old_tokens
-            norm_new_points = norm_new_tokens
-        else:
-            norm_old_points = normalize_tokens(p_0["chars"], old_size)
-            norm_new_points = normalize_tokens(n_0["chars"], new_size)
+            if aligner_config.granularity == "tokens":
+                norm_old_points = norm_old_tokens
+                norm_new_points = norm_new_tokens
+            else:
+                norm_old_points = normalize_tokens(p_0["chars"], old_size)
+                norm_new_points = normalize_tokens(n_0["chars"], new_size)
 
-        matches = get_match_words_from_page(p_0, aligner_config.granularity)
-        old_match, new_match = get_word_match_dict(
-            norm_old_points, norm_new_points, matches
-        )
+            matches = get_match_words_from_page(p_0, aligner_config.granularity)
+            old_match, new_match = get_word_match_dict(
+                norm_old_points, norm_new_points, matches
+            )
 
-        kps, cv_matches = get_keypoints(old_match, new_match, old_size, new_size)
+            kps, cv_matches = get_keypoints(old_match, new_match, old_size, new_size)
 
-        original_image = cv2.imread(old_images[page_number])
-        new_image = cv2.imread(new_images[page_number])
-        homography, mask = keypoints(
-            config=aligner_config,
-            kps=kps,
-            matches=cv_matches,
-            new_image=new_image,
-            old_image=original_image,
-            debug=debug,
-        )
-        match_ratio = mask.sum() / len(mask) if mask is not None else 0.
-        if match_ratio < aligner_config.min_keypoint_match_ratio:
-            label_to_token_by_page[page_number] = []
+            original_image = cv2.imread(old_images[page_number])
+            new_image = cv2.imread(new_images[page_number])
+            homography, mask = keypoints(
+                config=aligner_config,
+                kps=kps,
+                matches=cv_matches,
+                new_image=new_image,
+                old_image=original_image,
+                debug=debug,
+            )
+            match_ratio = mask.sum() / len(mask) if mask is not None else 0.0
+            if match_ratio < aligner_config.min_keypoint_match_ratio:
+                label_to_token_by_page[page_number] = []
+                print(f"Failed to align {file} page {page_number}")
+                continue
+
+            if homography is None:
+                message = f"RANSAC failed for {file} on page {page_number}, using identity matrix."
+                print(message)
+                logging.warning(message)
+                affine_warp = np.identity(3)
+            else:
+                affine_warp = np.vstack([homography, [0, 0, 1]])
+
+            ex_old_tokens, old_tokens_new_coords = transform_and_extract(
+                old_labels, min_offset, max_offset, old_tokens, affine_warp
+            )
+
+            label_token_map = defaultdict(list)
+            error_by_setting = defaultdict(list)
+
+            # No source labels on this page
+            if not ex_old_tokens.extracted_tokens:
+                label_to_token_by_page[page_number] = []
+                continue
+
+            for expansion_in_pixels in aligner_config.TEXT_EXTRACTION_ATOL:
+                for old_token_new_coords, o in zip(
+                    old_tokens_new_coords, ex_old_tokens.extracted_tokens
+                ):
+                    extracted_spans_for_label = extract_text_spans_from_box(
+                        expansion_in_pixels,
+                        new_size["width"],
+                        new_size["height"],
+                        norm_new_tokens,
+                        old_token_new_coords,
+                        debug=aligner_config.debug,
+                    )
+                    label_token_map[expansion_in_pixels].append(
+                        {
+                            "token": old_token_new_coords,
+                            "spans": extracted_spans_for_label,
+                            "original_token": o,
+                        }
+                    )
+                    error_by_setting[expansion_in_pixels].append(
+                        abs(
+                            extracted_spans_for_label["input_length"]
+                            - extracted_spans_for_label["output_length"]
+                        )
+                    )
+
+            for k, v in error_by_setting.items():
+                error_by_setting[k] = np.mean(v)
+
+            best_setting = min(error_by_setting.items(), key=lambda x: x[1])[0]
+
+            best_map = label_token_map[best_setting]
+
+            if aligner_config.debug:
+                for mapped_token in best_map:
+                    before = mapped_token["spans"]["before"]
+                    after = mapped_token["spans"]["after"]
+                    if len(before) != len(after):
+                        print(before, "-->", after)
+
+            for token in best_map:
+                for span in token["spans"]["text_spans"]:
+                    assert span["start"] <= span["end"], f"Before merge: {token}"
+
+            label_token_map = merge_adjacent_spans(best_map)
+
+            for token in best_map:
+                for span in token["spans"]["text_spans"]:
+                    assert span["start"] <= span["end"], f"After merge: {token}"
+
+            label_to_token_by_page[page_number] = best_map
+        except:
             print(f"Failed to align {file} page {page_number}")
-            continue
-
-        if homography is None:
-            message = f"RANSAC failed for {file} on page {page_number}, using identity matrix."
-            print(message)
-            logging.warning(message)
-            affine_warp = np.identity(3)
-        else:
-            affine_warp = np.vstack([homography, [0, 0, 1]])
-
-        ex_old_tokens, old_tokens_new_coords = transform_and_extract(
-            old_labels, min_offset, max_offset, old_tokens, affine_warp
-        )
-
-        label_token_map = defaultdict(list)
-        error_by_setting = defaultdict(list)
-
-        # No source labels on this page
-        if not ex_old_tokens.extracted_tokens:
             label_to_token_by_page[page_number] = []
-            continue
-
-        for expansion_in_pixels in aligner_config.TEXT_EXTRACTION_ATOL:
-            for old_token_new_coords, o in zip(old_tokens_new_coords, ex_old_tokens.extracted_tokens):
-                extracted_spans_for_label = extract_text_spans_from_box(
-                    expansion_in_pixels,
-                    new_size["width"],
-                    new_size["height"],
-                    norm_new_tokens,
-                    old_token_new_coords,
-                    debug=aligner_config.debug
-                )
-                label_token_map[expansion_in_pixels].append(
-                    {
-                        "token": old_token_new_coords, 
-                        "spans": extracted_spans_for_label,
-                        "original_token": o
-                    }
-                )
-                error_by_setting[expansion_in_pixels].append(abs(extracted_spans_for_label['input_length'] - extracted_spans_for_label['output_length']))
-
-        for k, v in error_by_setting.items():
-            error_by_setting[k] = np.mean(v)
-
-        best_setting = min(error_by_setting.items(), key=lambda x: x[1])[0]
-        
-        best_map = label_token_map[best_setting]
-
-        if aligner_config.debug:
-            for mapped_token in best_map:
-                before = mapped_token['spans']['before']
-                after = mapped_token['spans']['after']
-                if len(before) != len(after):
-                    print(before, "-->", after)
-
-        for token in best_map:
-            for span in token['spans']['text_spans']:
-                assert span['start'] <= span['end'], f"Before merge: {token}"
-
-        label_token_map = merge_adjacent_spans(best_map)
-        
-        for token in best_map:
-            for span in token['spans']['text_spans']:
-                assert span['start'] <= span['end'], f"After merge: {token}"
-
-        label_to_token_by_page[page_number] = best_map
 
     return label_to_token_by_page
 
