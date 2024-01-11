@@ -456,7 +456,7 @@ def run_all_pages_for_doc(
                 for span in token["spans"]["text_spans"]:
                     assert span["start"] <= span["end"], f"After merge: {token}"
 
-            label_to_token_by_page[page_number] = best_map
+            label_to_token_by_page[page_number] = label_token_map
         except:
             print(f"Failed to align {file} page {page_number}")
             label_to_token_by_page[page_number] = []
