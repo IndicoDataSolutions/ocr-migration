@@ -529,11 +529,11 @@ def run(config, num_docs=None, summary_file="./summary.xlsx"):
         aligner_config.new_engine_folder_name, "revised_labels.json"
     )
 
-    old_ocr = pd.read_csv(
-        f"./{aligner_config.old_engine_folder_name}/all_labels.csv", index_col=0
-    )
-    summary_by_file, overall_summary = summarize_results(all_results, old_ocr)
-    convert_to_excel(summary_by_file, overall_summary, summary_file)
+    # old_ocr = pd.read_csv(
+    #     f"./{aligner_config.old_engine_folder_name}/all_labels.csv", index_col=0
+    # )
+    # summary_by_file, overall_summary = summarize_results(all_results, old_ocr)
+    # convert_to_excel(summary_by_file, overall_summary, summary_file)
 
     with open(migrated_labels_csv, "w") as fd:
         json.dump(all_results, fd)
