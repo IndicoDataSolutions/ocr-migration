@@ -63,7 +63,7 @@ This will produce the new folder which contains the migrated labels:
 
 **Next, run ocr_migration.py.**
 
-- ocr_migration.py reads in "migration_config.yaml" to set the configuration of the migration-- any settings changes can be made 
+- ocr_migration.py reads in "old_to_new.yaml" to set the configuration of the migration-- any settings changes can be made 
 within that file.
 - the location where an excel summary should be saved is an optional argument, defaults to "./summary.xlsx".
 
