@@ -29,7 +29,7 @@ fqdn==1.5.1
 fuzzywuzzy==0.18.0
 gitdb==4.0.10
 GitPython==3.1.31
-idna==2.8
+idna==3.7
 imutils==0.5.4
 indico-client==5.1.4
 indico_toolkit==2.0.2
