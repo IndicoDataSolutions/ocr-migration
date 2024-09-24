@@ -122,7 +122,7 @@ def apply_labels(
     print("Reading csv...")
     new_df = pd.read_csv(new_export_path)
     name_to_file_id = {row["file_name"]: row["file_id"] for _, row in new_df.iterrows()}
-    client = IndicoClient(config=IndicoConfig(host=host, api_token_path=api_token_path))
+    client = IndicoClient(config=IndicoConfig(host=host, api_token_path=api_token_path,verify_ssl=False))
     print("Getting dataset details...")
     dataset = client.call(GetDataset(id=new_dataset_id))
     print("Loading revised labels...")

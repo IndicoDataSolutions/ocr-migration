@@ -191,6 +191,7 @@ def get_dataset(
     my_config = IndicoConfig(
         host=host,
         api_token_path=api_token_path,
+        verify_ssl=False
     )
     client = IndicoClient(config=my_config)
     if labelset_id:
@@ -250,5 +251,94 @@ def get_dataset(
     pd.DataFrame.from_records(output_records).to_csv(csv_path, index=False)
 
 
+def get_dataset_from_remaining(
+    name,
+    dataset_id,
+    # index,
+    labelset_id=None,
+    label_col="labels",
+    text_col="document",
+    filename_col="file_name",
+    host="app.indico.io",
+    api_token_path="prod_api_token.txt",
+):
+
+    my_config = IndicoConfig(
+        host=host,
+        api_token_path=api_token_path,
+        verify_ssl=False
+    )
+    client = IndicoClient(config=my_config)
+    if labelset_id:
+        labelset = next(
+            labelset
+            for labelset in client.call(GetLabelsetName(datasetId=dataset_id))[
+                "dataset"
+            ]["labelsets"]
+            if labelset["id"] == labelset_id
+        )
+        label_col = labelset["name"]
+
+    export_path = os.path.join(name, "raw_export.csv")
+
+    if not os.path.exists(export_path):
+        raw_export = get_export(client, dataset_id, labelset_id)
+        raw_export.to_csv(export_path)
+    else:
+        raw_export = pd.read_csv(export_path)
+
+    records = raw_export.to_dict("records")
+    output_records = []
+    label_col = label_col.rsplit("_", 1)[0]
+
+    all_rows = [row for i , row in enumerate(tqdm.tqdm(records))]
+    all_filenames = [os.path.splitext(os.path.basename(row[filename_col]))[0] for row in all_rows]
+    existing_filenames = [f .split(".pdf")[0] for f in os.listdir(os.path.join(name, "files"))]
+    remaining_filenames = [f for f in all_filenames if f not in existing_filenames]
+    records_to_run = [row for row in all_rows if os.path.splitext(os.path.basename(row[filename_col]))[0] not in existing_filenames]
+    # records_to_run = [(i, row)  for i , row in enumerate(tqdm.tqdm(records)) if i>index]
+    for row in records_to_run :
+
+        filename = os.path.splitext(os.path.basename(row[filename_col]))[0]
+        document_path = os.path.join(
+            name, "files", filename + "." + row["file_name"].split(".")[-1]
+        )
+        try:
+            page_ocrs, page_image_paths = get_ocr_by_datafile_id(
+                client, row["file_id"], dataset_dir=name, filename=filename
+            )
+
+            # Try to get text from export, but fallback to reconstructing from page OCR
+            if text_col in row:
+                text = row[text_col]
+            else:
+                text = text_from_ocr(page_ocrs)
+
+            # DF doesn't have labels or labels are null for a file
+            if label_col not in row or pd.isna(row[label_col]):
+                labels = None
+            else:
+                labels = reformat_labels(row[label_col], text)
+
+            output_record = {"ocr": json.dumps(page_ocrs), "text": text, "labels": labels}
+            output_record["image_files"] = json.dumps(page_image_paths)
+            output_record["document_path"] = document_path
+
+            with open(document_path, "wb") as fp:
+                fp.write(client.call(RetrieveStorageObject(row["file_url"])))
+
+            output_records.append(output_record)
+        except Exception as e:
+            print(document_path,"is problematic")
+
+    csv_path = os.path.join(name, "all_labels.csv")
+    logger.info("Creating CSV...")
+    pd.DataFrame.from_records(output_records).to_csv(csv_path, index=False)
+
+
+
 if __name__ == "__main__":
-    fire.Fire(get_dataset)
+    # fire.Fire(get_dataset)
+    # fire.Fire(get_dataset_from_start_point)
+    get_dataset_from_remaining("ghg_old",646,1242,host="indico.dv-lz.aws.ics.intcx.net",
+    api_token_path = "../indico_token/indico_api_token_dv_v5.txt")
