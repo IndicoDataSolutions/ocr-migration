@@ -339,6 +339,6 @@ def get_dataset_from_remaining(
 
 if __name__ == "__main__":
     # fire.Fire(get_dataset)
-    # fire.Fire(get_dataset_from_start_point)
-    get_dataset_from_remaining("ghg_old",646,1242,host="indico.dv-lz.aws.ics.intcx.net",
-    api_token_path = "../indico_token/indico_api_token_dv_v5.txt")
+    fire.Fire(get_dataset_from_remaining)
+    # get_dataset_from_remaining("ghg_old",646,1242,host="indico.dv-lz.aws.ics.intcx.net",
+    # api_token_path = "../indico_token/indico_api_token_dv_v5.txt")
