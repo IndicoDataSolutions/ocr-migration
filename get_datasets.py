@@ -335,10 +335,58 @@ def get_dataset_from_remaining(
     logger.info("Creating CSV...")
     pd.DataFrame.from_records(output_records).to_csv(csv_path, index=False)
 
+def get_docs_failed(name,dataset_id,host,api_token_path):
 
+    my_config = IndicoConfig(
+        host=host,
+        api_token_path=api_token_path,
+        verify_ssl=False
+    )
+    client = IndicoClient(config=my_config)
+    export_path = os.path.join(name, "raw_export.csv")
+
+    if not os.path.exists(export_path):
+        raw_export = get_export(client, dataset_id)
+        raw_export.to_csv(export_path)
+    else:
+        raw_export = pd.read_csv(export_path)
+
+    records = raw_export.to_dict("records")
+
+    all_rows = [row for i , row in enumerate(tqdm.tqdm(records))]
+    all_rows_ids = [d['file_id'] for d in all_rows]
+    files = []
+    for fid in all_rows_ids:
+        d = client.call(GetDatafileByID(datafileId=fid))
+        if d['datafile']['pages'] ==[]:
+            files.append(fid)
+    return [row['file_name'] for row in all_rows if row['file_id'] in files]
+
+def copy_file(orig_dir_path, out_dir_path, file_path):
+    import shutil
+    # Define the source file path and destination directory
+    source_file = os.path.join(os.path.abspath(orig_dir_path),file_path)
+    destination_folder = os.path.abspath(out_dir_path)
+
+    # Copy the file
+    shutil.copy(source_file, destination_folder)
+
+    print(f"{file_path} copied successfully!")
+
+def copy_failed_docs(dataset_id,host,api_token_path):
+    l_failed = get_docs_failed("new", dataset_id, host, api_token_path)
+    for f in l_failed:
+        copy_file('old/files','failed',f)
+
+    return
 
 if __name__ == "__main__":
     # fire.Fire(get_dataset)
-    fire.Fire(get_dataset_from_remaining)
-    # get_dataset_from_remaining("ghg_old",646,1242,host="indico.dv-lz.aws.ics.intcx.net",
-    # api_token_path = "../indico_token/indico_api_token_dv_v5.txt")
+    # fire.Fire(get_dataset_from_remaining)
+    get_dataset_from_remaining("ghg_old",646,1242,host="indico.dv-lz.aws.ics.intcx.net",
+    api_token_path = "../indico_token/indico_api_token_dv_v5.txt")
+    # get_dataset_from_remaining("new",10,host="dev.indico-v6.dv-lz.aws.ics.intcx.net",api_token_path="../indico_token/indico_api_token_dv_v6.txt")
+    # failed_docs_names = get_docs_failed("new",10,host="dev.indico-v6.dv-lz.aws.ics.intcx.net",api_token_path="../indico_token/indico_api_token_dv_v6.txt")
+    # print(failed_docs_names[:2])
+    # folder_failed_docs(orig_dir_path='old/files',out_dir_path='failed',file_path='4461_Industrial Bank of Korea_Sustainability report.pdf')
+    # copy_failed_docs(10,host="dev.indico-v6.dv-lz.aws.ics.intcx.net",api_token_path="../indico_token/indico_api_token_dv_v6.txt")
