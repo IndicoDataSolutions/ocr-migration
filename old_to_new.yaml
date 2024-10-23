@@ -11,5 +11,5 @@ granularity: tokens
 PARTIAL_AFFINE: True
 min_keypoint_match_ratio: 0.2
 debug: True
-source_folder: "old-metlife"
-target_folder: "new-metlife"
+source_folder: "old"
+target_folder: "new"
